@@ -1,0 +1,9 @@
+# RWKV State Tuning Requirements
+
+# Core dependencies
+torch>=2.0.0
+transformers>=4.30.0
+tqdm>=4.65.0
+
+# Optional: for better tokenizer support
+huggingface-hub>=0.34.0,<1.0

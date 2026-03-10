@@ -3,9 +3,8 @@ import os, math, gc, importlib
 import torch
 
 import torch.nn as nn
-from rwkvt.infctx_module import *
 
-from rwkvt.operator.rwkvop import RUN_CUDA_RWKV7g, RUN_RWKV7_STATE, RUN_RWKV7_INFCTX
+from .operator.rwkvop import RUN_CUDA_RWKV7g, RUN_RWKV7_STATE, RUN_RWKV7_INFCTX
 from torch.nn import functional as F
 
 if os.environ["FUSED_KERNEL"] == '1':
@@ -20,7 +19,7 @@ def RWKV_Tmix_v7(*args, **kwargs):
     if os.environ["RWKV_TRAIN_TYPE"] == 'state':
         return RWKV_Tmix_x070_State(*args, **kwargs)
     elif os.environ["RWKV_TRAIN_TYPE"] == 'infctx':
-        return RWKV_Tmix_x070_infctx(*args, **kwargs)
+        return None
     elif os.environ["RWKV_TRAIN_TYPE"] == 'fullstate':
         return RWKV_Tmix_x070_FullState(*args, **kwargs)
     else:
@@ -31,7 +30,6 @@ class RWKV_Tmix_x070(nn.Module):
         super().__init__()
         self.args = args
         self.layer_id = layer_id
-        self.my_testing = args.my_testing
 
         self.head_size = args.head_size_a
         self.n_head = args.dim_att // self.head_size
@@ -227,96 +225,3 @@ class RWKV_Tmix_x070_State(RWKV_Tmix_x070):
         x = self.output(x * g)
         return x, v_first
     
-
-class RWKV_Tmix_x070_infctx(RWKV_Tmix_x070):
-    def __init__(self, args, layer_id):
-        super().__init__(args, layer_id)
-
-    def forward(self, x, v_first, last_state: TimeMixState, attention_mask=None):
-        B, T, C = x.size()
-        H = self.n_head
-
-        if attention_mask is not None:
-            x = x.mul(attention_mask[:, -x.shape[-2]:, None])
-        
-        shift_state = last_state.shift_state
-        wkv_state = last_state.wkv_state.clone().contiguous() 
-
-        xx = torch.concat((shift_state.unsqueeze(1), x[:, :-1]), dim=1) - x
-
-
-        xr, xw, xk, xv, xa, xg = self.addcmul_kernel(x, xx)
-
-        #print(f'x shape = {x.shape}')
-
-        shift_state = x[:,-1,:]
-
-        r = self.receptance(xr)
-        if os.environ["WKV"] == 'cuda':
-            w = self.w0 + torch.tanh(xw @ self.w1) @ self.w2
-        else:
-            w = -F.softplus(-(self.w0 + torch.tanh(xw @ self.w1) @ self.w2)) - 0.5 # soft-clamp to (-inf, -0.5)
-        k = self.key(xk)
-        v = self.value(xv)
-        if self.layer_id == 0:
-            v_first = v # store the v of the first layer
-        else:
-            v = v + (v_first - v) * torch.sigmoid(self.v0 + (xv @ self.v1) @ self.v2) # add value residual
-        a = torch.sigmoid(self.a0 + (xa @ self.a1) @ self.a2) # a is "in-context learning rate"
-        g = torch.sigmoid(xg @ self.g1) @ self.g2
-
-        kk = k * self.k_k
-        kk = F.normalize(kk.view(B,T,H,-1), dim=-1, p=2.0).view(B,T,C)
-        k = k * (1 + (a-1) * self.k_a)
-
-        x , wkv_state = RUN_RWKV7_INFCTX(r,k,v,w,-kk, kk*a,wkv_state)
-
-        x = self.ln_x(x.view(B * T, C)).view(B, T, C)
-
-        x = x + ((r.view(B,T,H,-1)*k.view(B,T,H,-1)*self.r_k).sum(dim=-1, keepdim=True) * v.view(B,T,H,-1)).view(B,T,C)
-        x = self.output(x * g)
-        
-        return x, v_first, TimeMixState(shift_state,wkv_state)
-    
-
-class RWKV_Tmix_x070_FullState(RWKV_Tmix_x070):
-    def __init__(self, args, layer_id):
-        super().__init__(args, layer_id)
-        with torch.no_grad():
-            #for State-tuning
-            self.time_state = nn.Parameter(torch.zeros(self.n_head, self.head_size, self.head_size))
-            self.ts_state = nn.Parameter(torch.zeros(args.n_embd))
-
-
-    # @torch.compile
-    def forward(self, x, v_first, attention_mask=None):
-        B, T, C = x.size()
-        H = self.n_head
-
-        if attention_mask is not None:
-            x = x.mul(attention_mask[:, -x.shape[-2]:, None])
-        xx = self.time_shift(x) - x
-        xx[:,0,:] += self.ts_state
-        xr, xw, xk, xv, xa, xg = self.addcmul_kernel(x, xx)
-
-        r = self.receptance(xr)
-        w = -F.softplus(-(self.w0 + torch.tanh(xw @ self.w1) @ self.w2)) - 0.5 # soft-clamp to (-inf, -0.5)
-        k = self.key(xk)
-        v = self.value(xv)
-        if self.layer_id == 0:
-            v_first = v # store the v of the first layer
-        else:
-            v = v + (v_first - v) * torch.sigmoid(self.v0 + (xv @ self.v1) @ self.v2) # add value residual
-        a = torch.sigmoid(self.a0 + (xa @ self.a1) @ self.a2) # a is "in-context learning rate"
-        g = torch.sigmoid(xg @ self.g1) @ self.g2
-
-        kk = k * self.k_k
-        kk = F.normalize(kk.view(B,T,H,-1), dim=-1, p=2.0).view(B,T,C)
-        k = k * (1 + (a-1) * self.k_a)
-
-        x , _ = RUN_RWKV7_STATE(r,k,v,w,-kk, kk*a,self.time_state)
-        x = self.ln_x(x.view(B * T, C)).view(B, T, C)
-
-        x = x + ((r.view(B,T,H,-1)*k.view(B,T,H,-1)*self.r_k).sum(dim=-1, keepdim=True) * v.view(B,T,H,-1)).view(B,T,C)
-        x = self.output(x * g)
-        return x, v_first

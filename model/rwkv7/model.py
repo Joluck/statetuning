@@ -45,7 +45,6 @@ class RWKV7(nn.Module):
     def forward(self, input_ids):
         args = self.args
         B, T = input_ids.size()
-        assert T <= args.ctx_len, "Cannot forward, model ctx_len is exhausted."
 
         x = self.emb(input_ids)
         v_first = torch.empty_like(x)

@@ -18,7 +18,6 @@ class ModelArgs:
     vocab_size = 65536      # 词表大小
     n_embd = 1024           # 嵌入维度
     n_layer = 24            # 层数
-    ctx_len = 512           # 上下文长度
     head_size_a = 64        # 头大小
     head_size_divisor = 8   # 头大小除数 (用于LayerNorm eps)
 
@@ -32,6 +31,7 @@ class TrainArgs:
     num_steps = 1000          # 训练步数
     num_epochs = 1            # 训练轮数
     learning_rate = 1e-5      # 学习率
+    ctx_len = 2048
 # 创建配置
 model_args = ModelArgs()
 model_args.dim_att = model_args.n_embd
@@ -84,7 +84,7 @@ for i in range(min(2, len(dataset))):
     print(dataset.data[i][:200] + "..." if len(dataset.data[i]) > 200 else dataset.data[i])
 print("="*50 + "\n")
 
-seq_len = model_args.ctx_len
+seq_len = train_args.ctx_len
 def get_batch(batch_size=train_args.batch_size, seq_len=seq_len):
     return dataset.get_batch(batch_size, seq_len, model_args.vocab_size)
 

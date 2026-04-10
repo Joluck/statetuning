@@ -32,6 +32,7 @@ class TrainArgs:
     num_epochs = 1            # 训练轮数
     learning_rate = 1e-5      # 学习率
     ctx_len = 2048
+    shuffle = False          # 是否打乱数据顺序
 # 创建配置
 model_args = ModelArgs()
 model_args.dim_att = model_args.n_embd
@@ -75,7 +76,7 @@ print("="*60 + "\n")
 optimizer = Adam(model.parameters(), lr=train_args.learning_rate)
 
 # 加载数据集
-dataset = JSONLDataset(train_args.data_path)
+dataset = JSONLDataset(train_args.data_path, shuffle=train_args.shuffle)
 
 print("\n" + "="*50)
 print("数据集样本示例:")
@@ -102,7 +103,7 @@ for step in pbar:
 
     # 计算损失 (交叉熵)
     loss = nn.functional.cross_entropy(logits.view(-1, logits.size(-1)), labels.view(-1))
-
+    print(loss)
     # 反向传播
     optimizer.zero_grad()
     loss.backward()

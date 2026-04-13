@@ -13,6 +13,7 @@ from model.rwkv7.model import RWKV7
 from dataset import JSONLDataset
 from tqdm import tqdm
 import os
+import json
 # 模型配置类
 class ModelArgs:
     vocab_size = 65536      # 词表大小

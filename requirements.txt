@@ -7,3 +7,4 @@ tqdm>=4.65.0
 
 # Optional: for better tokenizer support
 huggingface-hub>=0.34.0,<1.0
+json

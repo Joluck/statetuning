@@ -91,40 +91,46 @@ def get_batch(batch_size=train_args.batch_size, seq_len=seq_len):
 
 # 训练循环
 model.train()
-
-# 使用 tqdm 进度条
-pbar = tqdm(range(train_args.num_steps), desc="Training", ncols=100)
-for step in pbar:
-    # 获取数据
-    input_ids, labels = get_batch()
-
-    # 前向传播
-    logits = model(input_ids)
-
-    # 计算损失 (交叉熵)
-    loss = nn.functional.cross_entropy(logits.view(-1, logits.size(-1)), labels.view(-1))
-    print(loss)
-    # 反向传播
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
-
-    # 更新进度条显示
-    pbar.set_postfix({"loss": f"{loss.item():.4f}"})
-
-print("Training completed!")
-
-# 保存包含 "state" 的权重
-print("\n保存包含 'state' 的权重...")
 os.makedirs(train_args.output_dir, exist_ok=True)
-model_name = os.path.basename(train_args.load_model).replace('.pth', '.state')
-save_path = os.path.join(train_args.output_dir, model_name)
-state_dict_to_save = {}
-for name, param in model.named_parameters():
-    if 'state' in name.lower():
-        # 去掉 "model." 前缀
-        clean_name = name.replace("model.", "")
-        state_dict_to_save[clean_name] = param.cpu()
+loss_log_path = os.path.join(train_args.output_dir, 'train_loss.jsonl')
 
-torch.save(state_dict_to_save, save_path)
-print(f"已保存 {len(state_dict_to_save)} 个 state 权重到: {save_path}")
+steps_per_epoch = max(1, len(dataset) // train_args.batch_size)
+total_steps = steps_per_epoch * train_args.num_epochs
+global_step = 0
+
+model_base_name = os.path.basename(train_args.load_model).replace('.pth', '')
+
+def save_state_weights(suffix=''):
+    state_dict_to_save = {}
+    for name, param in model.named_parameters():
+        if 'state' in name.lower():
+            clean_name = name.replace("model.", "")
+            state_dict_to_save[clean_name] = param.cpu()
+    save_name = f"{model_base_name}{suffix}.pth"
+    save_path = os.path.join(train_args.output_dir, save_name)
+    torch.save(state_dict_to_save, save_path)
+    print(f"已保存 {len(state_dict_to_save)} 个 state 权重到: {save_path}")
+
+with open(loss_log_path, 'w', encoding='utf-8') as log_f:
+    for epoch in range(train_args.num_epochs):
+        dataset._reset_indices()
+        pbar = tqdm(range(steps_per_epoch), desc=f"Epoch {epoch+1}/{train_args.num_epochs}", ncols=100)
+        for step in pbar:
+            input_ids, labels = get_batch()
+
+            logits = model(input_ids)
+            loss = nn.functional.cross_entropy(logits.view(-1, logits.size(-1)), labels.view(-1))
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            loss_val = loss.item()
+            pbar.set_postfix({"loss": f"{loss_val:.4f}"})
+            log_f.write(json.dumps({"epoch": epoch, "step": global_step, "loss": loss_val}) + '\n')
+            log_f.flush()
+            global_step += 1
+
+        save_state_weights(f"-{epoch+1}")
+
+print(f"Training completed! Total steps: {global_step}")

@@ -6,6 +6,7 @@ os.environ["RWKV_HEAD_SIZE_A"]='64'
 os.environ["RWKV_MY_TESTING"]='x070'
 os.environ["RWKV_TRAIN_TYPE"]='state'
 os.environ["RWKV_FLOAT_MODE"] = 'bf16'
+import argparse
 import torch
 import torch.nn as nn
 from torch.optim import Adam
@@ -14,26 +15,45 @@ from dataset import JSONLDataset
 from tqdm import tqdm
 import os
 import json
+
+parser = argparse.ArgumentParser()
+# 模型参数
+parser.add_argument('--vocab_size', type=int, default=65536, help='词表大小')
+parser.add_argument('--n_embd', type=int, default=1024, help='嵌入维度')
+parser.add_argument('--n_layer', type=int, default=24, help='层数')
+parser.add_argument('--head_size_a', type=int, default=64, help='头大小')
+parser.add_argument('--head_size_divisor', type=int, default=8, help='头大小除数')
+# 训练参数
+parser.add_argument('--load_model', type=str, default='/home/rwkv/models/rwkv7/rwkv7-g1a-0.4b-20250905-ctx4096.pth', help='预训练模型路径')
+parser.add_argument('--data_path', type=str, default='/home/rwkv/datas/bad_lan.jsonl', help='训练数据路径')
+parser.add_argument('--output_dir', type=str, default='./outmodel', help='输出文件夹路径')
+parser.add_argument('--precision', type=str, default='bf16', choices=['bf16', 'fp16', 'fp32'], help='训练精度')
+parser.add_argument('--batch_size', type=int, default=4, help='batch大小')
+parser.add_argument('--num_epochs', type=int, default=1, help='训练轮数')
+parser.add_argument('--learning_rate', type=float, default=1e-5, help='学习率')
+parser.add_argument('--ctx_len', type=int, default=2048, help='上下文长度')
+parser.add_argument('--shuffle', action='store_true', help='是否打乱数据顺序')
+args = parser.parse_args()
+
 # 模型配置类
 class ModelArgs:
-    vocab_size = 65536      # 词表大小
-    n_embd = 1024           # 嵌入维度
-    n_layer = 24            # 层数
-    head_size_a = 64        # 头大小
-    head_size_divisor = 8   # 头大小除数 (用于LayerNorm eps)
+    vocab_size = args.vocab_size
+    n_embd = args.n_embd
+    n_layer = args.n_layer
+    head_size_a = args.head_size_a
+    head_size_divisor = args.head_size_divisor
 
 # 训练配置类
 class TrainArgs:
-    load_model = '/home/rwkv/models/rwkv7/rwkv7-g1a-0.4b-20250905-ctx4096.pth'  # 预训练模型路径
-    data_path = '/home/rwkv/datas/bad_lan.jsonl'
-    output_dir = './outmodel'  # 输出文件夹路径，自动创建
-    precision = 'bf16'        # 训练精度: 'bf16' | 'fp16' | 'fp32'
-    batch_size = 4            # batch大小
-    num_steps = 1000          # 训练步数
-    num_epochs = 1            # 训练轮数
-    learning_rate = 1e-5      # 学习率
-    ctx_len = 2048
-    shuffle = False          # 是否打乱数据顺序
+    load_model = args.load_model
+    data_path = args.data_path
+    output_dir = args.output_dir
+    precision = args.precision
+    batch_size = args.batch_size
+    num_epochs = args.num_epochs
+    learning_rate = args.learning_rate
+    ctx_len = args.ctx_len
+    shuffle = args.shuffle
 # 创建配置
 model_args = ModelArgs()
 model_args.dim_att = model_args.n_embd

@@ -21,8 +21,6 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--vocab_size', type=int, default=65536, help='词表大小')
 parser.add_argument('--n_embd', type=int, default=1024, help='嵌入维度')
 parser.add_argument('--n_layer', type=int, default=24, help='层数')
-parser.add_argument('--head_size_a', type=int, default=64, help='头大小')
-parser.add_argument('--head_size_divisor', type=int, default=8, help='头大小除数')
 # 训练参数
 parser.add_argument('--load_model', type=str, default='/home/rwkv/models/rwkv7/rwkv7-g1a-0.4b-20250905-ctx4096.pth', help='预训练模型路径')
 parser.add_argument('--data_path', type=str, default='/home/rwkv/datas/bad_lan.jsonl', help='训练数据路径')
@@ -40,8 +38,8 @@ class ModelArgs:
     vocab_size = args.vocab_size
     n_embd = args.n_embd
     n_layer = args.n_layer
-    head_size_a = args.head_size_a
-    head_size_divisor = args.head_size_divisor
+    head_size_a = 64
+    head_size_divisor = 8
 
 # 训练配置类
 class TrainArgs:

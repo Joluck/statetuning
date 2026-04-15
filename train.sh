@@ -11,6 +11,7 @@ python train.py \
     --n_layer 24 \
     --precision bf16 \
     --batch_size 4 \
+    --num_steps 1000 \
     --num_epochs 1 \
     --learning_rate 1e-5 \
     --ctx_len 2048

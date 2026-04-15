@@ -27,6 +27,7 @@ parser.add_argument('--data_path', type=str, default='/home/rwkv/datas/bad_lan.j
 parser.add_argument('--output_dir', type=str, default='./outmodel', help='输出文件夹路径')
 parser.add_argument('--precision', type=str, default='bf16', choices=['bf16', 'fp16', 'fp32'], help='训练精度')
 parser.add_argument('--batch_size', type=int, default=4, help='batch大小')
+parser.add_argument('--num_steps', type=int, default=1000, help='每轮最大训练步数')
 parser.add_argument('--num_epochs', type=int, default=1, help='训练轮数')
 parser.add_argument('--learning_rate', type=float, default=1e-5, help='学习率')
 parser.add_argument('--ctx_len', type=int, default=2048, help='上下文长度')
@@ -48,6 +49,7 @@ class TrainArgs:
     output_dir = args.output_dir
     precision = args.precision
     batch_size = args.batch_size
+    num_steps = args.num_steps
     num_epochs = args.num_epochs
     learning_rate = args.learning_rate
     ctx_len = args.ctx_len
@@ -113,8 +115,7 @@ model.train()
 os.makedirs(train_args.output_dir, exist_ok=True)
 loss_log_path = os.path.join(train_args.output_dir, 'train_loss.jsonl')
 
-steps_per_epoch = max(1, len(dataset) // train_args.batch_size)
-total_steps = steps_per_epoch * train_args.num_epochs
+steps_per_epoch = min(train_args.num_steps, max(1, len(dataset) // train_args.batch_size))
 global_step = 0
 
 model_base_name = os.path.basename(train_args.load_model).replace('.pth', '')

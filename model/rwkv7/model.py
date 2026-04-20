@@ -5,6 +5,7 @@ import os
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+from torch.utils.checkpoint import checkpoint as torch_checkpoint
 from .block import Block
 
 class RWKV7(nn.Module):
@@ -50,7 +51,7 @@ class RWKV7(nn.Module):
         v_first = torch.empty_like(x)
 
         for block in self.blocks:
-            x, v_first = block(x, v_first)
+            x, v_first = torch_checkpoint(block, x, v_first, use_reentrant=False)
 
         x = self.ln_out(x)
         x = self.head(x)
